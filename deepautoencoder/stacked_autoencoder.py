@@ -5,14 +5,16 @@ import tensorflow as tf
 allowed_activations = ['sigmoid', 'tanh', 'softmax', 'relu', 'linear']
 allowed_noises = [None, 'gaussian', 'mask']
 allowed_losses = ['rmse', 'cross-entropy']
+allowed_optimizers = ['gd','adam']
 
 
 class StackedAutoEncoder:
     """A deep autoencoder with denoising capability"""
 
     def assertions(self):
-        global allowed_activations, allowed_noises, allowed_losses
+        global allowed_activations, allowed_noises, allowed_losses, allowed_optimizers
         assert self.loss in allowed_losses, 'Incorrect loss given'
+        assert self.optimizer in allowed_optimizers, 'Incorrect optimizer given'
         assert 'list' in str(
             type(self.dims)), 'dims must be a list even if there is one layer.'
         assert len(self.epoch) == len(
@@ -28,7 +30,7 @@ class StackedAutoEncoder:
             self.noise, allowed_noises), "Incorrect noise given"
 
     def __init__(self, dims, activations, epoch=1000, noise=None, loss='rmse',
-                 lr=0.001, batch_size=100, print_step=50):
+                 lr=0.001, batch_size=100, print_step=50, optimizer='adam'):
         self.print_step = print_step
         self.batch_size = batch_size
         self.lr = lr
@@ -37,6 +39,7 @@ class StackedAutoEncoder:
         self.noise = noise
         self.epoch = epoch
         self.dims = dims
+        self.optimizer = optimizer
         self.assertions()
         self.depth = len(dims)
         self.weights, self.biases = [], []
@@ -57,6 +60,11 @@ class StackedAutoEncoder:
             pass
 
     def fit(self, x):
+        '''
+
+        :param x: m x p dataframe
+        :return: trained weights and bias for the sdae
+        '''
         for i in range(self.depth):
             print('Layer {0}'.format(i + 1))
             if self.noise is None:
@@ -75,6 +83,7 @@ class StackedAutoEncoder:
                                  i], loss=self.loss,
                              batch_size=self.batch_size,
                              lr=self.lr, print_step=self.print_step)
+            print('Layer {0}'.format(i + 1) + ' Weight Dimension: ' + str(self.weights[i].shape))
 
     def transform(self, data):
         tf.reset_default_graph()
@@ -93,9 +102,11 @@ class StackedAutoEncoder:
 
     def run(self, data_x, data_x_, hidden_dim, activation, loss, lr,
             print_step, epoch, batch_size=100):
+
         tf.reset_default_graph()
+
         input_dim = len(data_x[0])
-        sess = tf.Session()
+
         x = tf.placeholder(dtype=tf.float32, shape=[None, input_dim], name='x')
         x_ = tf.placeholder(dtype=tf.float32, shape=[
                             None, input_dim], name='x_')
@@ -110,14 +121,14 @@ class StackedAutoEncoder:
             tf.matmul(x, encode['weights']) + encode['biases'], activation)
         decoded = tf.matmul(encoded, decode['weights']) + decode['biases']
 
-        # reconstruction loss
-        if loss == 'rmse':
-            loss = tf.sqrt(tf.reduce_mean(tf.square(tf.subtract(x_, decoded))))
-        elif loss == 'cross-entropy':
-            loss = -tf.reduce_mean(x_ * tf.log(decoded))
-        train_op = tf.train.AdamOptimizer(lr).minimize(loss)
+        #Define the loss function and optimizer
+        loss = self.cost(x, decoded, loss)
+        train_op = self.optimizers(lr, loss)
 
-        sess.run(tf.global_variables_initializer())
+        sess = tf.Session()
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
         for i in range(epoch):
             b_x, b_x_ = utils.get_batch(
                 data_x, data_x_, batch_size)
@@ -132,6 +143,18 @@ class StackedAutoEncoder:
         self.biases.append(sess.run(encode['biases']))
         return sess.run(encoded, feed_dict={x: data_x_})
 
+    def cost(self,x_,decoded ,loss):
+        if loss == 'rmse':
+            return tf.sqrt(tf.reduce_mean(tf.square(tf.subtract(x_, decoded))))
+        elif loss == 'cross-entropy':
+            return -tf.reduce_mean(x_ * tf.log(decoded))
+
+    def optimizers(self, lr, loss):
+        if self.optimizer == 'adam':
+            return tf.train.AdamOptimizer(lr).minimize(loss)
+        else:
+            return tf.train.GradientDescentOptimizer(lr).minimize(loss)
+
     def activate(self, linear, name):
         if name == 'sigmoid':
             return tf.nn.sigmoid(linear, name='encoded')
@@ -143,3 +166,6 @@ class StackedAutoEncoder:
             return tf.nn.tanh(linear, name='encoded')
         elif name == 'relu':
             return tf.nn.relu(linear, name='encoded')
+
+    def autoencoder(self):
+        return
