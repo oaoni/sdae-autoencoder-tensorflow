@@ -141,7 +141,7 @@ class StackedAutoEncoder:
                 self.loss_history[depth].append(loss_)
                 print('epoch {0}: global loss = {1}'.format(i, loss_))
                 print(self.loss_history)
-        #self.loss_val = l
+        self.loss_val = l
         # debug
         # print('Decoded', sess.run(decoded, feed_dict={x: self.data_x_})[0])
         self.weights.append(sess.run(encode['weights']))
