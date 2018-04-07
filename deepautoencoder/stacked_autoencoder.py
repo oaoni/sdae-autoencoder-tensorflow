@@ -31,7 +31,7 @@ class StackedAutoEncoder:
             self.noise, allowed_noises), "Incorrect noise given"
 
     def __init__(self, dims, activations, epoch=1000, noise=None, loss='rmse',
-                 lr=0.001, batch_size=100, print_step=50, optimizer='adam'):
+                 lr=0.001, batch_size=100, print_step=50, optimizer='adam',graph=False):
         self.print_step = print_step
         self.batch_size = batch_size
         self.lr = lr
@@ -39,12 +39,14 @@ class StackedAutoEncoder:
         self.activations = activations
         self.noise = noise
         self.epoch = epoch
+        self.graph = graph
         self.dims = dims
         self.optimizer = optimizer
         self.assertions()
         self.depth = len(dims)
-        self.weights, self.biases = [], []
-        self.loss_history, self.accuracy_history = self.list_init(),self.list_init()
+        self.weights, self.biases,self.encoded,self.decoded,self.biases_decode = [], [], [], [],[]
+        self.fit_noised,self.transform_noised = [], []
+        self.loss_history, self.accuracy_history = self.list_init(), self.list_init()
         self.model_path = os.getcwd()
 
     def add_noise(self, x):
@@ -64,7 +66,6 @@ class StackedAutoEncoder:
 
     def fit(self, x):
         '''
-
         :param x: m x p dataframe
         :return: trained weights and bias for the sdae
         '''
@@ -79,6 +80,8 @@ class StackedAutoEncoder:
                              print_step=self.print_step,depth=i)
             else:
                 temp = np.copy(x)
+                #debugging for viewing noised data
+                self.fit_noised = self.add_noise(temp)
                 x = self.run(data_x=self.add_noise(temp),
                              activation=self.activations[i], data_x_=x,
                              hidden_dim=self.dims[i],
@@ -88,22 +91,49 @@ class StackedAutoEncoder:
                              lr=self.lr, print_step=self.print_step,depth=i)
             print('Layer {0}'.format(i + 1) + ' Weight Dimension: ' + str(self.weights[i].shape))
 
+
     def transform(self, data):
+        '''
+        :param data: noised or denoised numpy array input data
+        :return: Sets self.encoded - array encoded input data for each layer
+        :return: Sets self.decoded - numpy array of encoded and decoded input data
+        :return: Numpy array of encoded and decoded input data
+        '''
+        # debugging for viewing noised data
+        self.transform_noised = data
         tf.reset_default_graph()
         sess = tf.Session()
         x = tf.constant(data, dtype=tf.float32)
         for w, b, a in zip(self.weights, self.biases, self.activations):
             weight = tf.constant(w, dtype=tf.float32)
+
             bias = tf.constant(b, dtype=tf.float32)
+
             layer = tf.matmul(x, weight) + bias
-            x = self.activate(layer, a)
+
+            x = self.activate(layer, a).eval(session=sess)
+            self.encoded.append(x)
+
+        depth = self.depth-1
+        for i in range(depth,0,-1):
+            print(x.shape)
+            print(self.weights[i].shape)
+            print(self.biases[i].shape)
+            x = tf.add(tf.matmul(x,self.weights[i],transpose_b=True),self.biases_decode[i])
+            x = self.activate(x,self.activations[i])
+
+        #Perform final matrix multiplication without activation, might have to move this back in loop, or at least try
+        x = tf.add(tf.matmul(x,self.weights[0],transpose_b=True),self.biases_decode[0])
+        print(type(x))
+        print(x.shape)
+
         return x.eval(session=sess)
 
     def fit_transform(self, x):
         self.fit(x)
         return self.transform(x)
 
-    def run(self, data_x,depth, data_x_, hidden_dim, activation, loss, lr,
+    def run(self, data_x, depth, data_x_, hidden_dim, activation, loss, lr,
             print_step, epoch, batch_size=100):
 
         tf.reset_default_graph()
@@ -133,19 +163,28 @@ class StackedAutoEncoder:
         sess.run(init)
 
         for i in range(epoch):
-            b_x, b_x_ = utils.get_batch(
-                data_x, data_x_, batch_size)
+            b_x, b_x_ = utils.get_batch(data_x, data_x_, batch_size)
             sess.run(train_op, feed_dict={x: b_x, x_: b_x_})
+            #Store global loss on a subset of steps
             if (i + 1) % print_step == 0:
+                #Acquire loss by evaluating the decoded and unnoised data
                 loss_ = sess.run(loss, feed_dict={x: data_x, x_: data_x_})
                 self.loss_history[depth].append(loss_)
                 print('epoch {0}: global loss = {1}'.format(i, loss_))
                 print(self.loss_history)
-        self.loss_val = l
+
+        #self.loss_val = l
         # debug
         # print('Decoded', sess.run(decoded, feed_dict={x: self.data_x_})[0])
         self.weights.append(sess.run(encode['weights']))
         self.biases.append(sess.run(encode['biases']))
+        self.biases_decode.append(sess.run(decode['biases']))
+
+        if (depth+1 == self.depth) and self.graph:
+            print("Tensorboard graph generated")
+            writer = tf.summary.FileWriter(os.path.join(os.getcwd(),'tmp'))
+            writer.add_graph(sess.graph)
+
         return sess.run(encoded, feed_dict={x: data_x_})
 
     def cost(self,x_,decoded ,loss):
