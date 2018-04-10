@@ -44,9 +44,9 @@ class StackedAutoEncoder:
         self.optimizer = optimizer
         self.assertions()
         self.depth = len(dims)
-        self.weights, self.biases,self.encoded,self.decoded,self.biases_decode = [], [], [], [],[]
+        self.weights, self.biases,self.encoded,self.decoded,self.biases_decode = [], [], [], [], []
         self.fit_noised,self.transform_noised = [], []
-        self.loss_history, self.accuracy_history = self.list_init(), self.list_init()
+        self.loss_history = self.list_init()
         self.model_path = os.getcwd()
 
     def add_noise(self, x):
@@ -69,6 +69,7 @@ class StackedAutoEncoder:
         :param x: m x p dataframe
         :return: trained weights and bias for the sdae
         '''
+        #Can change to only acquire noise on the input layer
         for i in range(self.depth):
             print('Layer {0}'.format(i + 1))
             if self.noise is None:
@@ -80,9 +81,15 @@ class StackedAutoEncoder:
                              print_step=self.print_step,depth=i)
             else:
                 temp = np.copy(x)
-                #debugging for viewing noised data
-                self.fit_noised = self.add_noise(temp)
-                x = self.run(data_x=self.add_noise(temp),
+                noised = self.add_noise(temp)
+
+                # If on the first layer, then store the noised inputs in the class
+                if i == 0:
+                    self.fit_noised = noised
+                    print(i)
+                    print(self.fit_noised.shape)
+
+                x = self.run(data_x=noised,
                              activation=self.activations[i], data_x_=x,
                              hidden_dim=self.dims[i],
                              epoch=self.epoch[
@@ -104,6 +111,7 @@ class StackedAutoEncoder:
         tf.reset_default_graph()
         sess = tf.Session()
         x = tf.constant(data, dtype=tf.float32)
+        """
         for w, b, a in zip(self.weights, self.biases, self.activations):
             weight = tf.constant(w, dtype=tf.float32)
 
@@ -113,6 +121,7 @@ class StackedAutoEncoder:
 
             x = self.activate(layer, a).eval(session=sess)
             self.encoded.append(x)
+        """
 
         depth = self.depth-1
         for i in range(depth,0,-1):
