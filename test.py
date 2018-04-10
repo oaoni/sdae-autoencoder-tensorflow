@@ -19,8 +19,8 @@ def test_data():
 
 
 def model_def(var):
-    model = StackedAutoEncoder(dims=[500, 200], activations=['linear', 'linear'], noise=var, epoch=[
-                               500, 500], loss='rmse', lr=0.01, batch_size=100, print_step=100, optimizer='adam',
+    model = StackedAutoEncoder(dims=[500,200], activations=['linear','linear'], noise=var, epoch=[
+                               2000,2000], loss='rmse', lr=0.01, batch_size=100, print_step=100, optimizer='adam',
                                graph=True)
     return model
 

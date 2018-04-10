@@ -111,7 +111,8 @@ class StackedAutoEncoder:
         tf.reset_default_graph()
         sess = tf.Session()
         x = tf.constant(data, dtype=tf.float32)
-        """
+
+        # Stores the encoded representation of the input data
         for w, b, a in zip(self.weights, self.biases, self.activations):
             weight = tf.constant(w, dtype=tf.float32)
 
@@ -121,8 +122,9 @@ class StackedAutoEncoder:
 
             x = self.activate(layer, a).eval(session=sess)
             self.encoded.append(x)
-        """
 
+
+        # Generates and returns the output of the autoencoder
         depth = self.depth-1
         for i in range(depth,0,-1):
             print(x.shape)
@@ -180,7 +182,7 @@ class StackedAutoEncoder:
                 loss_ = sess.run(loss, feed_dict={x: data_x, x_: data_x_})
                 self.loss_history[depth].append(loss_)
                 print('epoch {0}: global loss = {1}'.format(i, loss_))
-                print(self.loss_history)
+                #print(self.loss_history)
 
         #self.loss_val = l
         # debug
@@ -191,7 +193,7 @@ class StackedAutoEncoder:
 
         if (depth+1 == self.depth) and self.graph:
             print("Tensorboard graph generated")
-            writer = tf.summary.FileWriter(os.path.join(os.getcwd(),'tmp'))
+            writer = tf.summary.FileWriter(os.path.join(os.getcwd(),'graph'))
             writer.add_graph(sess.graph)
 
         return sess.run(encoded, feed_dict={x: data_x_})
